@@ -1,10 +1,19 @@
-import { InferenceSession, Tensor } from "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.mjs"
-
 const MODEL_URL = "https://episphere.github.io/delphi-onnx/delphi.onnx"
 const EMBEDDINGS_MODEL_URL = "https://episphere.github.io/delphi-onnx/delphiEmbeddings.onnx"
+const ORT_RUNTIME_URL = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/dist/ort.wasm.min.mjs"
 const NUM_DAYS_IN_A_YEAR = 365.25
+export const DEFAULT_IGNORE_TOKENS = Object.freeze([0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
 let instance = undefined
 let embeddingsInstance = undefined
+
+const runtimePromises = new Map()
+
+const loadRuntime = (runtimeModuleURL) => {
+    if (!runtimePromises.has(runtimeModuleURL)) {
+        runtimePromises.set(runtimeModuleURL, import(runtimeModuleURL))
+    }
+    return runtimePromises.get(runtimeModuleURL)
+}
 
 const mulberry32RNG = (seed = Date.now()) => {
     return function () {
@@ -86,11 +95,19 @@ export default class DelphiONNX {
     constructor(options = {}) {
         const {
             modelURL = MODEL_URL,
-            seed = Date.now()
+            seed = Date.now(),
+            executionProvider = "wasm",
+            runtimeModuleURL = ORT_RUNTIME_URL,
+            wasmPaths,
+            wasmNumThreads
         } = options
         this.modelURL = modelURL
         this.seed = seed
         this.rng = mulberry32RNG(this.seed)
+        this.executionProvider = executionProvider
+        this.runtimeModuleURL = runtimeModuleURL
+        this.wasmPaths = wasmPaths
+        this.wasmNumThreads = wasmNumThreads
 
         this.utils = new DelphiUtilities()
 
@@ -104,8 +121,16 @@ export default class DelphiONNX {
     }
 
     async getModel() {
-        this.session = await InferenceSession.create(this.modelURL, {
-            executionProviders: ["wasm", "cpu"]
+        this.runtime = await loadRuntime(this.runtimeModuleURL)
+        if (this.wasmPaths !== undefined) {
+            this.runtime.env.wasm.wasmPaths = this.wasmPaths
+        }
+        if (this.wasmNumThreads !== undefined) {
+            this.runtime.env.wasm.numThreads = this.wasmNumThreads
+        }
+        this.session = await this.runtime.InferenceSession.create(this.modelURL, {
+            // A single provider is deliberate: benchmark labels must not hide fallback.
+            executionProviders: [this.executionProvider]
         })
     }
 
@@ -125,6 +150,84 @@ export default class DelphiONNX {
         return this.utils.convertAgeToYears(ages, precision)
     }
 
+    prepareTrajectoryInputs(eventsList, options = {}) {
+        const { ageUnit = "auto" } = options
+        if (!Array.isArray(eventsList)) {
+            throw new Error("Events List must be an array of objects!")
+        }
+
+        let eventTokens = eventsList.map(event => event["event"])
+        let ages = eventsList.map(event => event["age"])
+        if (eventTokens.some(event => typeof event === "string")) {
+            eventTokens = this.getTokensFromEvents(eventTokens)
+        }
+        if (eventTokens.some(token => !Number.isInteger(token))) {
+            throw new Error("Every event must resolve to an integer token ID")
+        }
+
+        const convertYears = ageUnit === "years" ||
+            (ageUnit === "auto" && ages.every(age => age < 365))
+        if (!convertYears && ageUnit !== "days" && ageUnit !== "auto") {
+            throw new Error(`Unsupported ageUnit: ${ageUnit}`)
+        }
+        if (convertYears) {
+            ages = this.convertAgeToDays(ages)
+        }
+
+        // The exported graph consumes float32 ages. Materializing that cast here
+        // makes the SDK boundary explicit and lets fidelity tests compare tensors.
+        ages = Array.from(new Float32Array(ages))
+        return { eventTokens, ages }
+    }
+
+    applyPreSamplingMask(logits, eventTokens, options = {}) {
+        const {
+            ignoreTokens = DEFAULT_IGNORE_TOKENS,
+            noRepeat = true
+        } = options
+        const masked = logits.slice()
+
+        ignoreTokens.forEach(token => {
+            if (Number.isInteger(token) && token >= 0 && token < masked.length) {
+                masked[token] = -Infinity
+            }
+        })
+        if (noRepeat) {
+            eventTokens.forEach(token => {
+                if (token > 1 && token < masked.length) {
+                    masked[token] = -Infinity
+                }
+            })
+        }
+        return masked
+    }
+
+    createInputTensors(eventTokens, ages) {
+        if (!this.runtime) {
+            throw new Error("The ONNX Runtime session has not been initialized")
+        }
+        return {
+            idx: new this.runtime.Tensor(
+                "int64",
+                new BigInt64Array(eventTokens.map(x => BigInt(x))),
+                [1, eventTokens.length]
+            ),
+            age: new this.runtime.Tensor(
+                "float32",
+                new Float32Array(ages),
+                [1, ages.length]
+            )
+        }
+    }
+
+    async runInputTensors(feeds) {
+        const results = await this.session.run(feeds)
+        const logitsTensor = results.logits
+        // getData() is an explicit WebGPU readback and is also valid for Wasm.
+        const logits = await logitsTensor.getData()
+        return { logits, dims: [...logitsTensor.dims] }
+    }
+
     getNextLogits(eventTokens, ages) {
         return this.getLogits(eventTokens, ages, eventTokens.length - 1)
     }
@@ -137,29 +240,13 @@ export default class DelphiONNX {
         if (!this.session) {
             await this.initialize()
         }
-        if (!logitsIndex || !Number.isInteger(logitsIndex)) {
+        if (!Number.isInteger(logitsIndex)) {
             logitsIndex = eventTokens.length - 1
         }
 
         // Only works for a batch size of 1!
-        const idxTensor = new Tensor(
-            "int64",
-            new BigInt64Array(eventTokens.map((x) => BigInt(x))),
-            [1, eventTokens.length]
-        )
-
-        const ageTensor = new Tensor("float32", new Float32Array(ages), [
-            1,
-            ages.length
-        ])
-
-        const feeds = {
-            idx: idxTensor,
-            age: ageTensor
-        }
-
-        const results = await this.session.run(feeds)
-        let { data: logits, dims: logitsShape } = results.logits
+        const feeds = this.createInputTensors(eventTokens, ages)
+        const { logits, dims: logitsShape } = await this.runInputTensors(feeds)
 
         const numEvents = logitsShape[1]
         const vocabSize = logitsShape[2]
@@ -190,7 +277,7 @@ export default class DelphiONNX {
             maxAge = 85 * NUM_DAYS_IN_A_YEAR,
             noRepeat = true,
             terminationTokens = [1269],
-            ignoreTokens = []
+            ignoreTokens = DEFAULT_IGNORE_TOKENS
         } = options
 
         const maskTime = -10000
@@ -200,25 +287,16 @@ export default class DelphiONNX {
         let currentAge = [...ages]
 
         for (let step = 0; step < finalMaxTokens; step++) {
-            const { logits } = await this.getLogits(currentIdx, currentAge)
-
-            ignoreTokens.forEach(ignoreToken => {
-                if (ignoreToken < logits.length) {
-                    logits[ignoreToken] = -Infinity
-                }
+            const output = await this.getLogits(currentIdx, currentAge)
+            const logits = this.applyPreSamplingMask(output.logits, currentIdx, {
+                ignoreTokens,
+                noRepeat
             })
 
-            if (noRepeat) {
-                currentIdx.forEach(token => {
-                    if (token > 1 && token < logits.length) {
-                        logits[token] = -Infinity
-                    }
-                })
-            }
-
+            const maximumSampledInterval = 365 * 80
             const tSamples = logits.map(logit => {
                 const randomSample = -Math.exp(-logit) * Math.log(this.rng())
-                return Math.max(0, Math.min(maxAge, randomSample))
+                return Math.max(0, Math.min(maximumSampledInterval, randomSample))
             })
 
             let minTime = Infinity
@@ -258,35 +336,19 @@ export default class DelphiONNX {
             }
         })
 
-        let processedLogits = []
+        const processedLogits = []
         const vocabSize = finalLogitsOutput.dims[2]
-        if (noRepeat) {
-            for (let seqPos = 0; seqPos < currentIdx.length; seqPos++) {
-                const startIdx = seqPos * vocabSize
-                const positionLogits = finalLogitsOutput.logits.slice(
-                    startIdx,
-                    startIdx + vocabSize
-                )
-
-                currentIdx
-                    .slice(0, seqPos + 1)
-                    .forEach(token => {
-                        if (token > 1 && token < positionLogits.length) {
-                            positionLogits[token] = -Infinity
-                        }
-                    })
-
-                processedLogits.push(positionLogits)
-            }
-        } else {
-            for (let seqPos = 0; seqPos < currentIdx.length; seqPos++) {
-                const startIdx = seqPos * vocabSize
-                const positionLogits = finalLogitsOutput.logits.slice(
-                    startIdx,
-                    startIdx + vocabSize
-                )
-                processedLogits.push(positionLogits)
-            }
+        for (let seqPos = 0; seqPos < currentIdx.length; seqPos++) {
+            const startIdx = seqPos * vocabSize
+            const positionLogits = finalLogitsOutput.logits.slice(
+                startIdx,
+                startIdx + vocabSize
+            )
+            processedLogits.push(this.applyPreSamplingMask(
+                positionLogits,
+                currentIdx.slice(0, seqPos + 1),
+                { ignoreTokens, noRepeat }
+            ))
         }
 
         return {
@@ -300,9 +362,17 @@ export default class DelphiONNX {
 export class DelphiEmbeddings {
     constructor(options = {}) {
         const {
-            modelURL = EMBEDDINGS_MODEL_URL
+            modelURL = EMBEDDINGS_MODEL_URL,
+            executionProvider = "wasm",
+            runtimeModuleURL = ORT_RUNTIME_URL,
+            wasmPaths,
+            wasmNumThreads
         } = options
         this.modelURL = modelURL
+        this.executionProvider = executionProvider
+        this.runtimeModuleURL = runtimeModuleURL
+        this.wasmPaths = wasmPaths
+        this.wasmNumThreads = wasmNumThreads
 
         this.utils = new DelphiUtilities()
     }
@@ -316,8 +386,15 @@ export class DelphiEmbeddings {
     }
 
     async getModel() {
-        this.session = await InferenceSession.create(this.modelURL, {
-            executionProviders: ["wasm", "cpu"]
+        this.runtime = await loadRuntime(this.runtimeModuleURL)
+        if (this.wasmPaths !== undefined) {
+            this.runtime.env.wasm.wasmPaths = this.wasmPaths
+        }
+        if (this.wasmNumThreads !== undefined) {
+            this.runtime.env.wasm.numThreads = this.wasmNumThreads
+        }
+        this.session = await this.runtime.InferenceSession.create(this.modelURL, {
+            executionProviders: [this.executionProvider]
         })
     }
 
@@ -342,13 +419,13 @@ export class DelphiEmbeddings {
             await this.initialize()
         }
 
-        const idxTensor = new Tensor(
+        const idxTensor = new this.runtime.Tensor(
             "int64",
             new BigInt64Array(eventTokens.map((x) => BigInt(x))),
             [1, eventTokens.length]
         )
 
-        const ageTensor = new Tensor("float32", new Float32Array(ages), [
+        const ageTensor = new this.runtime.Tensor("float32", new Float32Array(ages), [
             1,
             ages.length
         ])
@@ -426,7 +503,7 @@ export class DelphiEmbeddings {
 
 }
 
-export const generateTrajectory = async ({ modelURL = MODEL_URL, seed = Date.now(), eventsList, options }) => {
+export const generateTrajectory = async ({ modelURL = MODEL_URL, seed = Date.now(), eventsList, options = {} }) => {
     if (typeof (instance) === 'undefined') {
         instance = new DelphiONNX({ modelURL, seed })
     }
@@ -435,19 +512,13 @@ export const generateTrajectory = async ({ modelURL = MODEL_URL, seed = Date.now
         throw new Error("Events List must be an array of objects!")
     }
 
-    if (typeof (instance.nameToTokenId) === 'undefined') {
+    if (typeof (instance.utils.nameToTokenId) === 'undefined') {
         await instance.initialize()
     }
 
-    let idx = eventsList.map(e => e['event'])
-    let ages = eventsList.map(e => e['age'])
-
-    if (idx.some(evt => typeof (evt) === 'string')) {
-        idx = instance.getTokensFromEvents(idx)
-    }
-    if (ages.every(ageForEvt => ageForEvt < 365)) {
-        ages = instance.convertAgeToDays(ages)
-    }
+    const { eventTokens: idx, ages } = instance.prepareTrajectoryInputs(eventsList, {
+        ageUnit: options.ageUnit ?? "auto"
+    })
 
     const generatedTrajectory = await instance.generateTrajectory(idx, ages, options)
     const predictedEvents = instance.getEventsFromTokens(generatedTrajectory.tokenIds)
@@ -474,7 +545,7 @@ export const getEmbeddings = async ({ modelURL = EMBEDDINGS_MODEL_URL, pooling, 
         throw new Error("Events List must be an array of objects!")
     }
 
-    if (typeof (embeddingsInstance.nameToTokenId) === 'undefined') {
+    if (typeof (embeddingsInstance.utils.nameToTokenId) === 'undefined') {
         await embeddingsInstance.initialize()
     }
 

@@ -1,0 +1,17 @@
+.DS_Store
+.venv/
+node_modules/
+
+# The reference checkpoint is supplied separately and identified by SHA-256 in
+# the evaluation report.
+OriginalModel.pt
+
+# Reproducible, but too large to version (downloaded data and raw logits).
+evaluation/generated/
+
+# Browser profiles and transient benchmark output.
+evaluation/.cache/
+evaluation/results/*.tmp
+
+__pycache__/
+*.py[cod]

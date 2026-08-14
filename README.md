@@ -1,5 +1,17 @@
 # JavaScript SDK for Delphi-2M (+ ONNX Export scripts)
 
+## Reproducible evaluation
+
+The evaluation compares `OriginalModel.pt` with `delphi.onnx` through the actual
+ONNX Runtime Web JavaScript path. It uses a fixed, seeded cohort from the
+upstream synthetic validation data, evaluates logits immediately before random
+sampling, checks the corresponding masked event distributions, and benchmarks
+PyTorch CPU, browser Wasm, and browser WebGPU on the development machine.
+
+- [Publication-ready results](evaluation/PUBLICATION_REPORT.md)
+- [Evaluation design and reproduction instructions](evaluation/README.md)
+- [Machine-readable measurements](evaluation/results)
+
 ### Example Usage
 #### Trajectory Generation:
 ```js

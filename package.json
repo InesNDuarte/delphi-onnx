@@ -1,0 +1,12 @@
+{
+  "name": "delphi-onnx",
+  "private": true,
+  "scripts": {
+    "evaluate:browser": "node evaluation/run_browser_evaluation.mjs",
+    "evaluate:report": "python3 evaluation/make_publication_report.py"
+  },
+  "devDependencies": {
+    "onnxruntime-web": "1.27.0",
+    "playwright-core": "1.62.1"
+  }
+}

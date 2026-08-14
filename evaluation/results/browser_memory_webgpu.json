@@ -1,0 +1,52 @@
+{
+  "backend": "webgpu",
+  "timestamp_utc": "2026-08-13T20:17:09.131Z",
+  "evaluation_provenance": {
+    "manifest_sha256": "85848e5fc2b3cb7bda0331f2d138203eed9a51603fafbe90a5113bfb1803c50b",
+    "upstream_commit": "fb72166be6b29d8db819227a59487e51c1df1454",
+    "validation_sha256": "f57f6a63e339f0c3643709f80443a75ecb05850986a24b91fb2d1910c1d11484",
+    "upstream_model_source_sha256": "1f7e9349c09bb83fe74fe5cb48cac8845fccd9a81c3dcff3f3fa73f120d6c906",
+    "checkpoint_sha256": "cbab7a70a811f7d3383162e3fc1ff38fe994103a98447a6eb874e131d78a6a87",
+    "onnx_sha256": "94c64a0b0ccee973c7b9a127b404f5dd202cf48e6eaa9d2c6bba9171585b37e4",
+    "labels_sha256": "e797c1ebce70ecf23bbd35306a7ef87b3649c50ae0f7c68cc529617327e215ac",
+    "sdk_sha256": "f3d6af7b880df27aa5f439b72585b1c4340c8006482351c37953b33ee14c135e",
+    "all_final_reference_sha256": "9bfc5b87384449e353468aa900f284727fb1cde380028517c38c54642282015b",
+    "stratified_full_reference_sha256": "41e113e69cb7248ac4b8130f9f429965aa3c05cb1654465fe3c2167fc679a2d2"
+  },
+  "process_memory": {
+    "method": "Peak summed RSS of Chrome processes newly launched for the dedicated trial, sampled every 100 ms",
+    "caveat": "Process-level proxy; summed RSS may double-count shared pages, assumes no unrelated Chrome process starts during the trial, and does not isolate GPU memory on unified-memory macOS",
+    "idle_rss_bytes": 926924800,
+    "peak_rss_bytes": 1557348352,
+    "incremental_peak_rss_bytes": 630423552,
+    "samples": 342,
+    "in_page": {
+      "user_agent_specific_memory": [
+        {
+          "label": "idle_page",
+          "available": true,
+          "bytes": 1030039
+        },
+        {
+          "label": "after_session_initialization",
+          "available": true,
+          "bytes": 38175363
+        },
+        {
+          "label": "after_ten_warm_inferences",
+          "available": true,
+          "bytes": 38518361
+        },
+        {
+          "label": "after_32_event_rollout",
+          "available": true,
+          "bytes": 38567525
+        }
+      ],
+      "webgpu": {
+        "session_created_with_webgpu_provider": true,
+        "adapter_metadata_exposed_by_runtime": false
+      }
+    }
+  }
+}

@@ -1,0 +1,124 @@
+{
+  "environment": {
+    "timestamp_utc": "2026-08-13T20:14:12Z",
+    "platform": "macOS-26.6.1-arm64-arm-64bit",
+    "python": "3.9.6",
+    "torch": "2.8.0",
+    "onnxruntime_python": "1.19.2",
+    "numpy": "2.0.2",
+    "chrome": "Google Chrome 151.0.7922.137",
+    "torch_threads": 5,
+    "torch_interop_threads": 11,
+    "mps_built": true,
+    "mps_available": false
+  },
+  "evaluation_provenance": {
+    "manifest_sha256": "85848e5fc2b3cb7bda0331f2d138203eed9a51603fafbe90a5113bfb1803c50b",
+    "upstream_commit": "fb72166be6b29d8db819227a59487e51c1df1454",
+    "validation_sha256": "f57f6a63e339f0c3643709f80443a75ecb05850986a24b91fb2d1910c1d11484",
+    "upstream_model_source_sha256": "1f7e9349c09bb83fe74fe5cb48cac8845fccd9a81c3dcff3f3fa73f120d6c906",
+    "checkpoint_sha256": "cbab7a70a811f7d3383162e3fc1ff38fe994103a98447a6eb874e131d78a6a87",
+    "onnx_sha256": "94c64a0b0ccee973c7b9a127b404f5dd202cf48e6eaa9d2c6bba9171585b37e4",
+    "labels_sha256": "e797c1ebce70ecf23bbd35306a7ef87b3649c50ae0f7c68cc529617327e215ac",
+    "all_final_reference_sha256": "9bfc5b87384449e353468aa900f284727fb1cde380028517c38c54642282015b",
+    "stratified_full_reference_sha256": "41e113e69cb7248ac4b8130f9f429965aa3c05cb1654465fe3c2167fc679a2d2"
+  },
+  "scope": "Synthetic-data checkpoint OriginalModel.pt; this is not the inaccessible published Delphi-2M checkpoint",
+  "cohort": {
+    "complete_held_out_trajectories": 7143,
+    "excluded_split_patient": 427985,
+    "raw_records": 181282,
+    "stratified_full_position_cases": 257
+  },
+  "pytorch_vs_python_onnxruntime": {
+    "role": "Intermediate conversion diagnostic, not the browser fidelity endpoint",
+    "all_cohort_final_logits": {
+      "count": 9071610,
+      "mean_absolute_error": 2.8581575718947086e-06,
+      "root_mean_square_error": 3.805238918615652e-06,
+      "median_absolute_error": 1.9073486328125e-06,
+      "p95_absolute_error": 7.62939453125e-06,
+      "p99_absolute_error": 1.1444091796875e-05,
+      "maximum_absolute_error": 3.0517578125e-05,
+      "atol": 0.0001,
+      "rtol": 0.0001,
+      "within_tolerance_fraction": 1.0
+    },
+    "all_cohort_final_distributions": {
+      "contexts": 7143,
+      "mean_absolute_probability_error": 1.0169244747925388e-09,
+      "maximum_absolute_probability_error": 9.75537641778601e-07,
+      "total_variation_distance": {
+        "mean": 6.457470414932635e-07,
+        "median": 6.452408395053129e-07,
+        "p95": 8.387920382997723e-07,
+        "maximum": 1.2366543273047417e-06
+      },
+      "jensen_shannon_divergence": {
+        "mean": 3.507435694689724e-13,
+        "median": 3.3940000293714867e-13,
+        "p95": 5.425433797186004e-13,
+        "maximum": 1.2198344559520522e-12
+      },
+      "absolute_log_total_rate_error": {
+        "mean": 1.0003048353736606e-06,
+        "median": 8.522382604070344e-07,
+        "p95": 2.4489915345426993e-06,
+        "maximum": 4.9230340426476005e-06
+      },
+      "top1_agreement": 1.0,
+      "mean_top5_overlap": 1.0,
+      "mean_top10_overlap": 1.0
+    },
+    "stratified_all_position_logits": {
+      "count": 12926060,
+      "mean_absolute_error": 2.8563453112921648e-06,
+      "root_mean_square_error": 3.8101125019235786e-06,
+      "median_absolute_error": 1.9073486328125e-06,
+      "p95_absolute_error": 7.62939453125e-06,
+      "p99_absolute_error": 1.1444091796875e-05,
+      "maximum_absolute_error": 3.0517578125e-05,
+      "atol": 0.0001,
+      "rtol": 0.0001,
+      "within_tolerance_fraction": 1.0
+    },
+    "stratified_all_position_distributions": {
+      "contexts": 10178,
+      "mean_absolute_probability_error": 7.649037658997619e-10,
+      "maximum_absolute_probability_error": 9.453121581071144e-07,
+      "total_variation_distance": {
+        "mean": 4.857138913463476e-07,
+        "median": 5.507146839002907e-07,
+        "p95": 8.112432006780134e-07,
+        "maximum": 1.1888606230504581e-06
+      },
+      "jensen_shannon_divergence": {
+        "mean": 2.5315164574283463e-13,
+        "median": 2.6630393109862255e-13,
+        "p95": 5.063408245134336e-13,
+        "maximum": 9.876594686253083e-13
+      },
+      "absolute_log_total_rate_error": {
+        "mean": 1.0655279761795683e-06,
+        "median": 9.192933179136276e-07,
+        "p95": 2.5919440799881953e-06,
+        "maximum": 4.860755026037111e-06
+      },
+      "top1_agreement": 1.0,
+      "mean_top5_overlap": 1.0,
+      "mean_top10_overlap": 1.0
+    }
+  },
+  "legacy_javascript_default_mask_diagnostic": {
+    "description": "Distribution change caused solely by the pre-evaluation SDK default ignoreTokens=[] rather than checkpoint ignore_tokens=[0,2,...,12]",
+    "contexts": 7143,
+    "total_variation_distance": {
+      "mean": 4.1579430582145605e-05,
+      "median": 5.299286257034183e-06,
+      "p95": 0.00018180222181926243,
+      "maximum": 0.0063823665012718335
+    },
+    "top1_agreement": 1.0,
+    "corrected_in_sdk": true
+  }
+}

@@ -24,6 +24,7 @@ def _resolve_state_dict(ckpt: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str,
         looks_like_state_dict = all(isinstance(v, torch.Tensor) for v in ckpt.values())
         if looks_like_state_dict:
             return ckpt, (model_args or {})
+    raise ValueError("Checkpoint does not contain a recognizable model state_dict")
     
 class DelphiForONNX(torch.nn.Module):
     def __init__(self, model: Delphi):
@@ -43,7 +44,6 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=1, help="Dummy batch size for export")
     parser.add_argument("--opset", type=int, default=17, help="ONNX opset version (e.g., 17 or 18)")
     parser.add_argument("--device", default="cpu", choices=["cpu", "cuda"], help="Device to instantiate model")
-    parser.add_argument("--strict-load", action="store_true", help="Use strict=True when loading state_dict")
     args = parser.parse_args()
 
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
@@ -51,6 +51,14 @@ def main() -> None:
     print(f"Loading checkpoint: {args.checkpoint}")
     ckpt = torch.load(args.checkpoint, map_location="cpu")
     state_dict, model_args = _resolve_state_dict(ckpt)
+    if any(key.startswith("_orig_mod.") for key in state_dict):
+        state_dict = {
+            key.removeprefix("_orig_mod."): value for key, value in state_dict.items()
+        }
+    if args.embeddings_only:
+        # The checkpoint's tied output head is deliberately absent from the
+        # embeddings-only module; every remaining parameter must still match.
+        state_dict = {key: value for key, value in state_dict.items() if key != "lm_head.weight"}
 
     cfg = DelphiConfig()
 
@@ -67,12 +75,8 @@ def main() -> None:
             print(f"  {k}: {getattr(cfg, k)}")
 
     model = Delphi(config=cfg, embeddingsOnly=args.embeddings_only).to(device)
-    missing, unexpected = model.load_state_dict(state_dict, strict=args.strict_load)
-    print("Loaded state_dict (strict={}):".format(args.strict_load))
-    if missing:
-        print("  Missing keys:", missing)
-    if unexpected:
-        print("  Unexpected keys:", unexpected)
+    model.load_state_dict(state_dict, strict=True)
+    print("Loaded state_dict with strict=True")
 
     model.eval()
 
@@ -88,7 +92,7 @@ def main() -> None:
     dynamic_axes = {
         "idx": {0: "batch", 1: "seq"},
         "age": {0: "batch", 1: "seq"},
-        "output": {0: "batch", 1: "seq"},
+        output_names[0]: {0: "batch", 1: "seq"},
     }
 
 

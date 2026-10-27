@@ -126,15 +126,13 @@ The 60 browser steady-state warm-up executions (10 model-only and 10 SDK end-to-
 >
 > On the tested desktop, median model-only latency at context lengths 12/24/48 was 2.522/2.906/3.943 ms for PyTorch CPU, 1.770/3.240/6.570 ms for browser Wasm, and 4.850/4.910/4.775 ms for browser WebGPU. A 32-event rollout took a median 112.242 ms in PyTorch, 149.660 ms in Wasm (1.33×), and 176.450 ms in WebGPU (1.57×). The ONNX artifact was 9.758 MB; raw first-use payloads were 23.669 MB (Wasm) and 37.033 MB (WebGPU). Median cold session initialization/length-34 first-inference times were 263.875/46.857 ms for Wasm and 462.947/81.312 ms for WebGPU; 60 browser steady-state warm-up executions took 249.905 and 346.320 ms. Incremental peak newly launched Chrome-process RSS was 344.293 MB and 652.984 MB, respectively. These measurements demonstrate sub-200-ms median 32-event rollouts on the tested desktop, but not an unqualified “near-native” or mobile-performance claim.
 
-## Draft response to reviewers
-
-### Comment 1: fidelity
+### Fidelity
 
 Thank you; we agree that conversion alone was insufficient evidence of correctness. We added a deterministic, end-to-end comparison against the PyTorch implementation using the synthetic-data checkpoint, since the checkpoint from the original Delphi-2M publication is not accessible. The primary endpoint is the actual JavaScript/ONNX Runtime Web path, not Python ONNX Runtime. We compared 9,071,610 final-position logits from all 7,143 complete held-out validation trajectories and 12,926,060 all-position logits from a fixed stratified set of 256 trajectories plus one authored lifestyle/no-event edge case. Sampling was excluded so that both implementations could be compared immediately before the stochastic boundary; instead, we compared the resulting masked event-probability distributions and log total event rates.
 
 For Wasm, logit MAE/max absolute error were 2.880e-06/3.052e-05; for WebGPU they were 5.897e-06/1.640e-04. All logits satisfied `|Δ| <= 10^-4 + 10^-4|reference|`. Maximum probability error, total-variation distance, and log-total-rate error were 1.143e-06, 1.272e-06, and 4.857e-06 for Wasm, and 6.794e-06, 8.397e-06, and 3.517e-05 for WebGPU. Top-1 agreement was 100% for both. JavaScript preprocessing matched Python exactly in every tested token and float32 age cell, and event-name postprocessing had zero mismatches. Importantly, the exercise exposed an SDK default-mask discrepancy, which we corrected; we now describe and test the checkpoint’s ignored-token mask explicitly. We added these methods, quantitative results, tolerances, fixed seeds, and reproducibility artifacts to the manuscript and repository.
 
-### Comment 2: performance
+### Performance
 
 Thank you; we replaced qualitative performance assertions with measurements and limited our inference to the tested desktop. On an Apple M3 Pro, browser model-only latency at context lengths 12/24/48 was 1.770/3.240/6.570 ms for one-thread Wasm and 4.850/4.910/4.775 ms for WebGPU, compared with 2.522/2.906/3.943 ms for PyTorch CPU. A fixed 32-event rollout required median 112.242 ms in PyTorch, 149.660 ms in Wasm, and 176.450 ms in WebGPU. We also report 10-trial cold initialization and length-34 first-inference times, 60-execution browser warm-up totals, the 9.758-MB model, backend-specific raw first-use payloads of 23.669 and 37.033 MB, and memory proxies.
 
